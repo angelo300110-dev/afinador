@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Afinador de Guitarra</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+
+        .tuner-display {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .note-name {
+            font-size: 4em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .frequency {
+            font-size: 1.5em;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .tuning-indicator {
+            position: relative;
+            height: 80px;
+            background: #e9ecef;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+
+        .indicator-bar {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 4px;
+            height: 100%;
+            background: #333;
+            transform: translateX(-50%);
+            transition: left 0.1s ease;
+        }
+
+        .center-line {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            width: 2px;
+            height: 100%;
+            background: #28a745;
+            transform: translateX(-50%);
+            z-index: 1;
+        }
+
+        .status {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .status.flat {
+            background: #ffc107;
+            color: #856404;
+        }
+
+        .status.in-tune {
+            background: #28a745;
+            color: white;
+        }
+
+        .status.sharp {
+            background: #dc3545;
+            color: white;
+        }
+
+        .status.waiting {
+            background: #6c757d;
+            color: white;
+        }
+
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .string-reference {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .string-reference h3 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .string-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .string-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 15px;
+            background: white;
+            border-radius: 5px;
+            font-size: 0.95em;
+        }
+
+        .string-item .string-number {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .error-message {
+            background: #dc3545;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .cents-display {
+            font-size: 1.1em;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎸 Afinador de Guitarra</h1>
+        
+        <div class="tuner-display">
+            <div class="note-name" id="noteName">-</div>
+            <div class="frequency" id="frequency">0.00 Hz</div>
+            <div class="cents-display" id="cents">0 cents</div>
+            
+            <div class="tuning-indicator">
+                <div class="center-line"></div>
+                <div class="indicator-bar" id="indicatorBar"></div>
+            </div>
+            
+            <div class="status waiting" id="status">Toca una cuerda para empezar</div>
+        </div>
+
+        <div class="controls">
+            <button id="startButton">Iniciar Afinador</button>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="string-reference">
+            <h3>Afinación Estándar (EADGBE)</h3>
+            <div class="string-list">
+                <div class="string-item">
+                    <span><span class="string-number">6ª</span> cuerda (E2)</span>
+                    <span>82.41 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">5ª</span> cuerda (A2)</span>
+                    <span>110.00 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">4ª</span> cuerda (D3)</span>
+                    <span>146.83 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">3ª</span> cuerda (G3)</span>
+                    <span>196.00 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">2ª</span> cuerda (B3)</span>
+                    <span>246.94 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">1ª</span> cuerda (E4)</span>
+                    <span>329.63 Hz</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // CONFIGURACIÓN Y VARIABLES GLOBALES
+        // ============================================
+        
+        const guitarStrings = [
+            { name: 'E', octave: 2, frequency: 82.41 },
+            { name: 'A', octave: 2, frequency: 110.00 },
+            { name: 'D', octave: 3, frequency: 146.83 },
+            { name: 'G', octave: 3, frequency: 196.00 },
+            { name: 'B', octave: 3, frequency: 246.94 },
+            { name: 'E', octave: 4, frequency: 329.63 }
+        ];
+
+        let audioContext;
+        let analyser;
+        let microphone;
+        let animationId;
+        let isRunning = false;
+
+        // Buffer para suavizar lecturas
+        const frequencyHistory = [];
+        const historySize = 8;
+
+        // Elementos del DOM
+        const startButton = document.getElementById('startButton');
+        const noteName = document.getElementById('noteName');
+        const frequency = document.getElementById('frequency');
+        const cents = document.getElementById('cents');
+        const status = document.getElementById('status');
+        const indicatorBar = document.getElementById('indicatorBar');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // ============================================
+        // DETECCIÓN DE FRECUENCIA MEJORADA
+        // ============================================
+
+        /**
+         * Algoritmo YIN modificado para mejor detección de pitch
+         */
+        function detectPitch(buffer, sampleRate) {
+            const threshold = 0.1;
+            const probabilityThreshold = 0.1;
+            
+            // Calcular energía de la señal
+            let sum = 0;
+            for (let i = 0; i < buffer.length; i++) {
+                sum += buffer[i] * buffer[i];
+            }
+            const rms = Math.sqrt(sum / buffer.length);
+            
+            // Si la señal es muy débil, no hay nota
+            if (rms < 0.01) return -1;
+
+            // Implementar autocorrelación mejorada
+            const SIZE = buffer.length;
+            const maxOffset = Math.floor(SIZE / 2);
+            const yinBuffer = new Float32Array(maxOffset);
+
+            // Paso 1: Calcular la función de diferencia
+            yinBuffer[0] = 1;
+            let runningSum = 0;
+
+            for (let tau = 1; tau < maxOffset; tau++) {
+                yinBuffer[tau] = 0;
+                for (let i = 0; i < maxOffset; i++) {
+                    const delta = buffer[i] - buffer[i + tau];
+                    yinBuffer[tau] += delta * delta;
+                }
+            }
+
+            // Paso 2: Diferencia acumulativa normalizada
+            for (let tau = 1; tau < maxOffset; tau++) {
+                runningSum += yinBuffer[tau];
+                if (runningSum === 0) {
+                    yinBuffer[tau] = 1;
+                } else {
+                    yinBuffer[tau] *= tau / runningSum;
+                }
+            }
+
+            // Paso 3: Buscar el primer mínimo por debajo del umbral
+            let tauEstimate = -1;
+            let minValue = 1;
+            
+            for (let tau = 2; tau < maxOffset; tau++) {
+                if (yinBuffer[tau] < threshold) {
+                    while (tau + 1 < maxOffset && yinBuffer[tau + 1] < yinBuffer[tau]) {
+                        tau++;
+                    }
+                    tauEstimate = tau;
+                    break;
+                }
+            }
+
+            // Si no encontramos por umbral, buscar el mínimo absoluto
+            if (tauEstimate === -1) {
+                for (let tau = 2; tau < maxOffset; tau++) {
+                    if (yinBuffer[tau] < minValue) {
+                        minValue = yinBuffer[tau];
+                        tauEstimate = tau;
+                    }
+                }
+            }
+
+            // Verificar que la probabilidad sea suficiente
+            if (tauEstimate !== -1 && yinBuffer[tauEstimate] < probabilityThreshold) {
+                return -1;
+            }
+
+            // Interpolación parabólica para mayor precisión
+            if (tauEstimate > 0 && tauEstimate < maxOffset - 1) {
+                const s0 = yinBuffer[tauEstimate - 1];
+                const s1 = yinBuffer[tauEstimate];
+                const s2 = yinBuffer[tauEstimate + 1];
+                const adjustment = (s2 - s0) / (2 * (2 * s1 - s2 - s0));
+                tauEstimate += adjustment;
+            }
+
+            return sampleRate / tauEstimate;
+        }
+
+        /**
+         * Suavizado mediante mediana para eliminar valores atípicos
+         */
+        function getSmoothedFrequency(newFreq) {
+            if (newFreq <= 0) return -1;
+
+            frequencyHistory.push(newFreq);
+            
+            if (frequencyHistory.length > historySize) {
+                frequencyHistory.shift();
+            }
+
+            // Usar mediana en lugar de promedio para mejor robustez
+            if (frequencyHistory.length >= 3) {
+                const sorted = [...frequencyHistory].sort((a, b) => a - b);
+                const mid = Math.floor(sorted.length / 2);
+                return sorted.length % 2 === 0 
+                    ? (sorted[mid - 1] + sorted[mid]) / 2 
+                    : sorted[mid];
+            }
+
+            return newFreq;
+        }
+
+        /**
+         * Encuentra la nota más cercana considerando también octavas
+         */
+        function findClosestNote(freq) {
+            if (freq < 60 || freq > 400) return null;
+
+            let closestNote = guitarStrings[0];
+            let minDiff = Math.abs(freq - closestNote.frequency);
+
+            for (let note of guitarStrings) {
+                const diff = Math.abs(freq - note.frequency);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestNote = note;
+                }
+            }
+
+            // Verificar que esté dentro de un rango razonable (±1 semitono = ±100 cents)
+            const cents = getCents(freq, closestNote.frequency);
+            if (Math.abs(cents) > 100) return null;
+
+            return closestNote;
+        }
+
+        /**
+         * Calcula la diferencia en cents
+         */
+        function getCents(freq, targetFreq) {
+            return Math.floor(1200 * Math.log2(freq / targetFreq));
+        }
+
+        // ============================================
+        // ACTUALIZACIÓN DE INTERFAZ
+        // ============================================
+
+        function updateDisplay(freq) {
+            if (freq === -1 || freq === null) {
+                status.textContent = 'Toca una cuerda';
+                status.className = 'status waiting';
+                return;
+            }
+
+            const smoothedFreq = getSmoothedFrequency(freq);
+            if (smoothedFreq === -1) return;
+
+            const closestNote = findClosestNote(smoothedFreq);
+            
+            if (!closestNote) {
+                status.textContent = 'Fuera de rango';
+                status.className = 'status waiting';
+                return;
+            }
+
+            const centsOff = getCents(smoothedFreq, closestNote.frequency);
+
+            // Actualizar display
+            noteName.textContent = `${closestNote.name}${closestNote.octave}`;
+            frequency.textContent = `${smoothedFreq.toFixed(2)} Hz`;
+            cents.textContent = `${centsOff > 0 ? '+' : ''}${centsOff} cents`;
+
+            // Estado de afinación
+            const tolerance = 5;
+            let statusText = '';
+            let statusClass = '';
+
+            if (Math.abs(centsOff) <= tolerance) {
+                statusText = '✓ ¡Afinado!';
+                statusClass = 'in-tune';
+            } else if (centsOff < -tolerance) {
+                statusText = '↓ Bajo (Flat) - Sube la tensión';
+                statusClass = 'flat';
+            } else {
+                statusText = '↑ Alto (Sharp) - Baja la tensión';
+                statusClass = 'sharp';
+            }
+
+            status.textContent = statusText;
+            status.className = `status ${statusClass}`;
+
+            // Actualizar barra
+            const maxCents = 50;
+            const clampedCents = Math.max(-maxCents, Math.min(maxCents, centsOff));
+            const percentage = (clampedCents / maxCents) * 50; // -50 a +50
+            const position = 50 + percentage; // 0 a 100
+            indicatorBar.style.left = `${position}%`;
+
+            // Color de barra
+            if (Math.abs(centsOff) <= tolerance) {
+                indicatorBar.style.background = '#28a745';
+                indicatorBar.style.width = '6px';
+            } else if (centsOff < 0) {
+                indicatorBar.style.background = '#ffc107';
+                indicatorBar.style.width = '4px';
+            } else {
+                indicatorBar.style.background = '#dc3545';
+                indicatorBar.style.width = '4px';
+            }
+        }
+
+        // ============================================
+        // ANÁLISIS DE AUDIO EN LOOP
+        // ============================================
+
+        function analyzeAudio() {
+            if (!isRunning) return;
+
+            const bufferLength = analyser.fftSize;
+            const buffer = new Float32Array(bufferLength);
+            analyser.getFloatTimeDomainData(buffer);
+
+            const detectedFreq = detectPitch(buffer, audioContext.sampleRate);
+            updateDisplay(detectedFreq);
+
+            animationId = requestAnimationFrame(analyzeAudio);
+        }
+
+        // ============================================
+        // CONTROL DEL AFINADOR
+        // ============================================
+
+        async function startTuner() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 4096;
+                analyser.smoothingTimeConstant = 0.8;
+
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    } 
+                });
+
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+
+                isRunning = true;
+                startButton.textContent = 'Detener Afinador';
+                startButton.style.background = '#dc3545';
+                errorMessage.style.display = 'none';
+
+                analyzeAudio();
+
+            } catch (error) {
+                console.error('Error:', error);
+                errorMessage.textContent = '❌ No se pudo acceder al micrófono. Verifica los permisos.';
+                errorMessage.style.display = 'block';
+            }
+        }
+
+        function stopTuner() {
+            isRunning = false;
+
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+
+            if (microphone) {
+                microphone.disconnect();
+                microphone = null;
+            }
+
+            if (analyser) {
+                analyser.disconnect();
+                analyser = null;
+            }
+
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+
+            frequencyHistory.length = 0;
+
+            startButton.textContent = 'Iniciar Afinador';
+            startButton.style.background = '#667eea';
+
+            noteName.textContent = '-';
+            frequency.textContent = '0.00 Hz';
+            cents.textContent = '0 cents';
+            status.textContent = 'Toca una cuerda para empezar';
+            status.className = 'status waiting';
+            indicatorBar.style.left = '50%';
+            indicatorBar.style.background = '#333';
+            indicatorBar.style.width = '4px';
+        }
+
+        // ============================================
+        // EVENT LISTENERS
+        // ============================================
+
+        startButton.addEventListener('click', () => {
+            if (!isRunning) {
+                startTuner();
+            } else {
+                stopTuner();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (isRunning) stopTuner();
+        });
+    </script>
+</body>
+</html>
