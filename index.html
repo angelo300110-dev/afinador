@@ -207,267 +207,379 @@
         <div class="string-reference">
             <h3>Afinación Estándar (EADGBE)</h3>
             <div class="string-list">
-                <div class="string-item"><span><span class="string-number">6ª</span> cuerda (E2)</span><span>82.41 Hz</span></div>
-                <div class="string-item"><span><span class="string-number">5ª</span> cuerda (A2)</span><span>110.00 Hz</span></div>
-                <div class="string-item"><span><span class="string-number">4ª</span> cuerda (D3)</span><span>146.83 Hz</span></div>
-                <div class="string-item"><span><span class="string-number">3ª</span> cuerda (G3)</span><span>196.00 Hz</span></div>
-                <div class="string-item"><span><span class="string-number">2ª</span> cuerda (B3)</span><span>246.94 Hz</span></div>
-                <div class="string-item"><span><span class="string-number">1ª</span> cuerda (E4)</span><span>329.63 Hz</span></div>
+                <div class="string-item">
+                    <span><span class="string-number">6ª</span> cuerda (E2)</span>
+                    <span>82.41 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">5ª</span> cuerda (A2)</span>
+                    <span>110.00 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">4ª</span> cuerda (D3)</span>
+                    <span>146.83 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">3ª</span> cuerda (G3)</span>
+                    <span>196.00 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">2ª</span> cuerda (B3)</span>
+                    <span>246.94 Hz</span>
+                </div>
+                <div class="string-item">
+                    <span><span class="string-number">1ª</span> cuerda (E4)</span>
+                    <span>329.63 Hz</span>
+                </div>
             </div>
         </div>
     </div>
 
-<script>
-/* ============================================================
-   CONFIGURACIÓN
-============================================================ */
+    <script>
+        // ============================================
+        // CONFIGURACIÓN Y VARIABLES GLOBALES
+        // ============================================
 
-const guitarStrings = [
-    { name: 'E', octave: 2, frequency: 82.41 },
-    { name: 'A', octave: 2, frequency: 110.00 },
-    { name: 'D', octave: 3, frequency: 146.83 },
-    { name: 'G', octave: 3, frequency: 196.00 },
-    { name: 'B', octave: 3, frequency: 246.94 },
-    { name: 'E', octave: 4, frequency: 329.63 }
-];
+        const guitarStrings = [
+            { name: 'E', octave: 2, frequency: 82.41 },
+            { name: 'A', octave: 2, frequency: 110.00 },
+            { name: 'D', octave: 3, frequency: 146.83 },
+            { name: 'G', octave: 3, frequency: 196.00 },
+            { name: 'B', octave: 3, frequency: 246.94 },
+            { name: 'E', octave: 4, frequency: 329.63 }
+        ];
 
-let audioContext, analyser, microphone, animationId;
-let isRunning = false;
+        let audioContext;
+        let analyser;
+        let microphone;
+        let animationId;
+        let isRunning = false;
 
-const frequencyHistory = [];
-const historySize = 8;
+        const frequencyHistory = [];
+        const historySize = 8;
 
-const startButton = document.getElementById('startButton');
-const noteName = document.getElementById('noteName');
-const frequency = document.getElementById('frequency');
-const centsElem = document.getElementById('cents');
-const status = document.getElementById('status');
-const indicatorBar = document.getElementById('indicatorBar');
-const errorMessage = document.getElementById('errorMessage');
+        const startButton = document.getElementById('startButton');
+        const noteName = document.getElementById('noteName');
+        const frequency = document.getElementById('frequency');
+        const centsElem = document.getElementById('cents');
+        const status = document.getElementById('status');
+        const indicatorBar = document.getElementById('indicatorBar');
+        const errorMessage = document.getElementById('errorMessage');
 
-/* ============================================================
-   FUNCIÓN detectPitch() — VERSIÓN CORREGIDA
-============================================================ */
+        // ============================================
+        // DETECCIÓN DE FRECUENCIA (AUTOCORRELACIÓN)
+        // ============================================
 
-function detectPitch(buffer, sampleRate) {
-    const threshold = 0.1;             
-    const probabilityThreshold = 0.1;
+        function detectPitch(buffer, sampleRate) {
+            const SIZE = buffer.length;
+            let rms = 0;
 
-    let sum = 0;
-    for (let i = 0; i < buffer.length; i++) {
-        sum += buffer[i] * buffer[i];
-    }
-    const rms = Math.sqrt(sum / buffer.length);
-    if (rms < 0.01) return -1;
-
-    const SIZE = buffer.length;
-    const maxOffset = Math.floor(SIZE / 2);
-    const yinBuffer = new Float32Array(maxOffset);
-
-    yinBuffer[0] = 1;
-
-    for (let tau = 1; tau < maxOffset; tau++) {
-        let diff = 0;
-        for (let i = 0; i < maxOffset; i++) {
-            const delta = buffer[i] - buffer[i + tau];
-            diff += delta * delta;
-        }
-        yinBuffer[tau] = diff;
-    }
-
-    let runningSum = 0;
-    for (let tau = 1; tau < maxOffset; tau++) {
-        runningSum += yinBuffer[tau];
-        yinBuffer[tau] = runningSum ? yinBuffer[tau] * tau / runningSum : 1;
-    }
-
-    let tauEstimate = -1;
-    for (let tau = 2; tau < maxOffset; tau++) {
-        if (yinBuffer[tau] < threshold) {
-            while (tau + 1 < maxOffset && yinBuffer[tau + 1] < yinBuffer[tau]) {
-                tau++;
+            for (let i = 0; i < SIZE; i++) {
+                const val = buffer[i];
+                rms += val * val;
             }
-            tauEstimate = tau;
-            break;
-        }
-    }
+            rms = Math.sqrt(rms / SIZE);
 
-    if (tauEstimate === -1) {
-        let minValue = 1;
-        for (let tau = 2; tau < maxOffset; tau++) {
-            if (yinBuffer[tau] < minValue) {
-                minValue = yinBuffer[tau];
-                tauEstimate = tau;
+            // si la señal es muy baja, no hacemos nada
+            if (rms < 0.01) return -1;
+
+            let r1 = 0;
+            let r2 = SIZE - 1;
+            const thres = 0.2;
+
+            // recorta parte inicial silenciosa
+            for (let i = 0; i < SIZE / 2; i++) {
+                if (Math.abs(buffer[i]) < thres) {
+                    r1 = i;
+                    break;
+                }
+            }
+
+            // recorta parte final silenciosa
+            for (let i = 1; i < SIZE / 2; i++) {
+                if (Math.abs(buffer[SIZE - i]) < thres) {
+                    r2 = SIZE - i;
+                    break;
+                }
+            }
+
+            const trimmed = buffer.slice(r1, r2);
+            const trimmedSize = trimmed.length;
+
+            const c = new Array(trimmedSize).fill(0);
+
+            // autocorrelación
+            for (let i = 0; i < trimmedSize; i++) {
+                for (let j = 0; j < trimmedSize - i; j++) {
+                    c[i] += trimmed[j] * trimmed[j + i];
+                }
+            }
+
+            // buscar el primer valle
+            let d = 0;
+            while (d < trimmedSize - 1 && c[d] > c[d + 1]) {
+                d++;
+            }
+
+            // buscar el máximo a partir de ahí
+            let maxval = -1;
+            let maxpos = -1;
+            for (let i = d; i < trimmedSize; i++) {
+                if (c[i] > maxval) {
+                    maxval = c[i];
+                    maxpos = i;
+                }
+            }
+
+            const T0 = maxpos;
+            if (T0 <= 0) return -1;
+
+            let freq = sampleRate / T0;
+
+            // limitar al rango típico de guitarra
+            if (freq < 60 || freq > 400) return -1;
+
+            // pequeño truco por si agarró un armónico: probar dividir entre 2
+            const half = freq / 2;
+            if (half >= 60 && half <= 400) {
+                // si al dividir entre 2 queda más cerca de alguna cuerda, usamos eso
+                const closestOriginal = findClosestNoteRaw(freq);
+                const closestHalf = findClosestNoteRaw(half);
+                if (closestHalf && closestOriginal) {
+                    const diffOrig = Math.abs(freq - closestOriginal.frequency);
+                    const diffHalf = Math.abs(half - closestHalf.frequency);
+                    if (diffHalf < diffOrig) {
+                        freq = half;
+                    }
+                }
+            }
+
+            return freq;
+        }
+
+        // versión "cruda" para comparar distancias, sin filtros extra
+        function findClosestNoteRaw(freq) {
+            let closest = guitarStrings[0];
+            let minDiff = Math.abs(freq - closest.frequency);
+
+            for (let note of guitarStrings) {
+                const diff = Math.abs(freq - note.frequency);
+                if (diff < minDiff) {
+                    closest = note;
+                    minDiff = diff;
+                }
+            }
+            return closest;
+        }
+
+        function getSmoothedFrequency(newFreq) {
+            if (newFreq <= 0) return -1;
+
+            frequencyHistory.push(newFreq);
+            if (frequencyHistory.length > historySize) {
+                frequencyHistory.shift();
+            }
+
+            if (frequencyHistory.length >= 3) {
+                const sorted = [...frequencyHistory].sort((a, b) => a - b);
+                const mid = Math.floor(sorted.length / 2);
+                return sorted.length % 2 === 0
+                    ? (sorted[mid - 1] + sorted[mid]) / 2
+                    : sorted[mid];
+            }
+
+            return newFreq;
+        }
+
+        function findClosestNote(freq) {
+            if (freq < 60 || freq > 400) return null;
+
+            let closestNote = guitarStrings[0];
+            let minDiff = Math.abs(freq - closestNote.frequency);
+
+            for (let note of guitarStrings) {
+                const diff = Math.abs(freq - note.frequency);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    closestNote = note;
+                }
+            }
+
+            const cents = getCents(freq, closestNote.frequency);
+            // si está demasiado lejos (> 100 cents), lo descartamos
+            if (Math.abs(cents) > 100) return null;
+
+            return closestNote;
+        }
+
+        function getCents(freq, targetFreq) {
+            return Math.floor(1200 * Math.log2(freq / targetFreq));
+        }
+
+        // ============================================
+        // ACTUALIZACIÓN DE INTERFAZ
+        // ============================================
+
+        function updateDisplay(freq) {
+            if (freq === -1 || freq === null) {
+                status.textContent = 'Toca una cuerda';
+                status.className = 'status waiting';
+                return;
+            }
+
+            const smoothedFreq = getSmoothedFrequency(freq);
+            if (smoothedFreq === -1) return;
+
+            const closestNote = findClosestNote(smoothedFreq);
+            if (!closestNote) {
+                status.textContent = 'Fuera de rango';
+                status.className = 'status waiting';
+                return;
+            }
+
+            const centsOff = getCents(smoothedFreq, closestNote.frequency);
+
+            noteName.textContent = `${closestNote.name}${closestNote.octave}`;
+            frequency.textContent = `${smoothedFreq.toFixed(2)} Hz`;
+            centsElem.textContent = `${centsOff > 0 ? '+' : ''}${centsOff} cents`;
+
+            const tolerance = 5;
+            let statusText = '';
+            let statusClass = '';
+
+            if (Math.abs(centsOff) <= tolerance) {
+                statusText = '✓ ¡Afinado!';
+                statusClass = 'in-tune';
+            } else if (centsOff < -tolerance) {
+                statusText = '↓ Bajo (Flat) - Sube la tensión';
+                statusClass = 'flat';
+            } else {
+                statusText = '↑ Alto (Sharp) - Baja la tensión';
+                statusClass = 'sharp';
+            }
+
+            status.textContent = statusText;
+            status.className = `status ${statusClass}`;
+
+            const maxCents = 50;
+            const clampedCents = Math.max(-maxCents, Math.min(maxCents, centsOff));
+            const percentage = (clampedCents / maxCents) * 50;
+            const position = 50 + percentage;
+            indicatorBar.style.left = `${position}%`;
+
+            if (Math.abs(centsOff) <= tolerance) {
+                indicatorBar.style.background = '#28a745';
+                indicatorBar.style.width = '6px';
+            } else if (centsOff < 0) {
+                indicatorBar.style.background = '#ffc107';
+                indicatorBar.style.width = '4px';
+            } else {
+                indicatorBar.style.background = '#dc3545';
+                indicatorBar.style.width = '4px';
             }
         }
-    }
 
-    // 🔥 FIX REAL
-    if (tauEstimate === -1 || yinBuffer[tauEstimate] > probabilityThreshold) {
-        return -1;
-    }
+        // ============================================
+        // LOOP DE ANÁLISIS
+        // ============================================
 
-    if (tauEstimate > 0 && tauEstimate < maxOffset - 1) {
-        const s0 = yinBuffer[tauEstimate - 1];
-        const s1 = yinBuffer[tauEstimate];
-        const s2 = yinBuffer[tauEstimate + 1];
-        const adjustment = (s2 - s0) / (2 * (2 * s1 - s2 - s0));
-        tauEstimate += adjustment;
-    }
+        function analyzeAudio() {
+            if (!isRunning) return;
 
-    return sampleRate / tauEstimate;
-}
+            const bufferLength = analyser.fftSize;
+            const buffer = new Float32Array(bufferLength);
+            analyser.getFloatTimeDomainData(buffer);
 
-/* ============================================================
-   FUNCIONES RESTANTES DEL AFINADOR
-============================================================ */
+            const detectedFreq = detectPitch(buffer, audioContext.sampleRate);
+            updateDisplay(detectedFreq);
 
-function getSmoothedFrequency(newFreq) {
-    if (newFreq <= 0) return -1;
-
-    frequencyHistory.push(newFreq);
-    if (frequencyHistory.length > historySize) frequencyHistory.shift();
-
-    if (frequencyHistory.length >= 3) {
-        const sorted = [...frequencyHistory].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        return sorted.length % 2 === 0 
-            ? (sorted[mid - 1] + sorted[mid]) / 2 
-            : sorted[mid];
-    }
-
-    return newFreq;
-}
-
-function findClosestNote(freq) {
-    if (freq < 60 || freq > 400) return null;
-
-    let closest = guitarStrings[0];
-    let minDiff = Math.abs(freq - closest.frequency);
-
-    for (let note of guitarStrings) {
-        const diff = Math.abs(freq - note.frequency);
-        if (diff < minDiff) {
-            closest = note;
-            minDiff = diff;
+            animationId = requestAnimationFrame(analyzeAudio);
         }
-    }
 
-    const cents = getCents(freq, closest.frequency);
-    if (Math.abs(cents) > 100) return null;
+        // ============================================
+        // CONTROL DEL AFINADOR
+        // ============================================
 
-    return closest;
-}
+        async function startTuner() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+                analyser.smoothingTimeConstant = 0.6;
 
-function getCents(freq, targetFreq) {
-    return Math.floor(1200 * Math.log2(freq / targetFreq));
-}
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
 
-function updateDisplay(freq) {
-    if (freq === -1) {
-        status.textContent = 'Toca una cuerda';
-        status.className = 'status waiting';
-        return;
-    }
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
 
-    const smoothedFreq = getSmoothedFrequency(freq);
-    const closestNote = findClosestNote(smoothedFreq);
+                isRunning = true;
+                startButton.textContent = 'Detener Afinador';
+                startButton.style.background = '#dc3545';
+                errorMessage.style.display = 'none';
 
-    if (!closestNote) {
-        status.textContent = 'Fuera de rango';
-        status.className = 'status waiting';
-        return;
-    }
+                analyzeAudio();
 
-    const cents = getCents(smoothedFreq, closestNote.frequency);
+            } catch (error) {
+                console.error('Error:', error);
+                errorMessage.textContent = '❌ No se pudo acceder al micrófono. Verifica los permisos.';
+                errorMessage.style.display = 'block';
+            }
+        }
 
-    noteName.textContent = `${closestNote.name}${closestNote.octave}`;
-    frequency.textContent = `${smoothedFreq.toFixed(2)} Hz`;
-    centsElem.textContent = (cents > 0 ? '+' : '') + cents + ' cents';
+        function stopTuner() {
+            isRunning = false;
 
-    const tolerance = 5;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
 
-    if (Math.abs(cents) <= tolerance) {
-        status.textContent = '✓ ¡Afinado!';
-        status.className = 'status in-tune';
-    } else if (cents < -tolerance) {
-        status.textContent = '↓ Bajo (Flat)';
-        status.className = 'status flat';
-    } else {
-        status.textContent = '↑ Alto (Sharp)';
-        status.className = 'status sharp';
-    }
+            if (microphone) {
+                microphone.disconnect();
+                microphone = null;
+            }
 
-    const maxCents = 50;
-    const clamped = Math.max(-maxCents, Math.min(maxCents, cents));
-    const percentage = (clamped / maxCents) * 50;
-    indicatorBar.style.left = `${50 + percentage}%`;
-}
+            if (analyser) {
+                analyser.disconnect();
+                analyser = null;
+            }
 
-function analyzeAudio() {
-    if (!isRunning) return;
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
 
-    const buffer = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(buffer);
+            frequencyHistory.length = 0;
 
-    const detectedFreq = detectPitch(buffer, audioContext.sampleRate);
-    updateDisplay(detectedFreq);
+            startButton.textContent = 'Iniciar Afinador';
+            startButton.style.background = '#667eea';
 
-    animationId = requestAnimationFrame(analyzeAudio);
-}
+            noteName.textContent = '-';
+            frequency.textContent = '0.00 Hz';
+            centsElem.textContent = '0 cents';
+            status.textContent = 'Toca una cuerda para empezar';
+            status.className = 'status waiting';
+            indicatorBar.style.left = '50%';
+            indicatorBar.style.background = '#333';
+            indicatorBar.style.width = '4px';
+        }
 
-async function startTuner() {
-    try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 4096;
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: { 
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false
+        startButton.addEventListener('click', () => {
+            if (!isRunning) {
+                startTuner();
+            } else {
+                stopTuner();
             }
         });
 
-        microphone = audioContext.createMediaStreamSource(stream);
-        microphone.connect(analyser);
-
-        isRunning = true;
-        startButton.textContent = "Detener Afinador";
-        startButton.style.background = "#dc3545";
-        analyzeAudio();
-
-    } catch (err) {
-        errorMessage.style.display = "block";
-        errorMessage.textContent = "❌ No se pudo acceder al micrófono.";
-    }
-}
-
-function stopTuner() {
-    isRunning = false;
-    cancelAnimationFrame(animationId);
-
-    if (microphone) microphone.disconnect();
-    if (audioContext) audioContext.close();
-
-    startButton.textContent = "Iniciar Afinador";
-    startButton.style.background = "#667eea";
-
-    noteName.textContent = "-";
-    frequency.textContent = "0.00 Hz";
-    centsElem.textContent = "0 cents";
-    status.textContent = "Toca una cuerda";
-    status.className = "status waiting";
-    indicatorBar.style.left = "50%";
-}
-
-startButton.addEventListener("click", () => {
-    if (isRunning) stopTuner();
-    else startTuner();
-});
-
-</script>
-
+        window.addEventListener('beforeunload', () => {
+            if (isRunning) stopTuner();
+        });
+    </script>
 </body>
 </html>
